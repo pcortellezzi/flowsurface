@@ -21,7 +21,7 @@ use screen::{
     Notification, UserTimezone
 };
 use data_providers::{
-    binance, bybit, Exchange, StreamType, Ticker, TickerInfo, TickerStats,
+    binance, bybit, rithmic, Exchange, StreamType, Ticker, TickerInfo, TickerStats,
 };
 use window::{window_events, Window, WindowEvent};
 use iced::{
@@ -163,6 +163,9 @@ impl State {
                         }
                         Exchange::BybitLinear | Exchange::BybitSpot => {
                             fetch_ticker_info(*exchange, bybit::fetch_ticksize(*market_type))
+                        }
+                        Exchange::Rithmic => {
+                            fetch_ticker_info(*exchange, rithmic::fetch_ticksize(*market_type))
                         }
                     }
                 })
@@ -426,6 +429,9 @@ impl State {
                                 Exchange::BybitLinear | Exchange::BybitSpot => {
                                     fetch_ticker_prices(*exchange, bybit::fetch_ticker_prices(*market_type))
                                 }
+                                Exchange::Rithmic => {
+                                    fetch_ticker_prices(*exchange, rithmic::fetch_ticker_prices(*market_type))
+                                }
                             }
                         })
                         .collect::<Vec<Task<Message>>>()
@@ -637,7 +643,7 @@ impl State {
                                 self.tickers_table.view(size).map(Message::TickersTable)
                             })
                         ]
-                        .width(200)
+                        .width(260)
                     } else {
                         column![]
                     }

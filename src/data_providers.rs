@@ -12,8 +12,11 @@ use rust_decimal::{
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
+use hproxy::{ProxyConfig, AuthCredential};
+
 pub mod binance;
 pub mod bybit;
+pub mod rithmic;
 pub mod fetcher;
 
 #[allow(clippy::large_enum_variant)]
@@ -260,6 +263,7 @@ pub enum Exchange {
     BinanceSpot,
     BybitLinear,
     BybitSpot,
+    Rithmic,
 }
 
 impl std::fmt::Display for Exchange {
@@ -272,16 +276,18 @@ impl std::fmt::Display for Exchange {
                 Exchange::BinanceSpot => "Binance Spot",
                 Exchange::BybitLinear => "Bybit Linear",
                 Exchange::BybitSpot => "Bybit Spot",
+                Exchange::Rithmic => "Rythmic",
             }
         )
     }
 }
 impl Exchange {
-    pub const MARKET_TYPES: [(Exchange, MarketType); 4] = [
+    pub const MARKET_TYPES: [(Exchange, MarketType); 5] = [
         (Exchange::BinanceFutures, MarketType::LinearPerps),
         (Exchange::BybitLinear, MarketType::LinearPerps),
         (Exchange::BinanceSpot, MarketType::Spot),
         (Exchange::BybitSpot, MarketType::Spot),
+        (Exchange::Rithmic, MarketType::LinearPerps),
     ];
 }
 
@@ -380,7 +386,7 @@ pub struct StreamConfig<I> {
 impl<I> StreamConfig<I> {
     pub fn new(id: I, exchange: Exchange) -> Self {
         let market_type = match exchange {
-            Exchange::BinanceFutures | Exchange::BybitLinear => MarketType::LinearPerps,
+            Exchange::BinanceFutures | Exchange::BybitLinear | Exchange::Rithmic => MarketType::LinearPerps,
             Exchange::BinanceSpot | Exchange::BybitSpot => MarketType::Spot,
         };
 
@@ -545,14 +551,10 @@ where
 
 pub fn tls_connector() -> Result<TlsConnector, StreamError> {
     let mut root_store = tokio_rustls::rustls::RootCertStore::empty();
-
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    
+    root_store.add_parsable_certificates(
+        &rustls_native_certs::load_native_certs().expect("could not load platform certs"),
+    );
 
     let config = ClientConfig::builder()
         .with_safe_defaults()
@@ -564,9 +566,23 @@ pub fn tls_connector() -> Result<TlsConnector, StreamError> {
 
 async fn setup_tcp_connection(domain: &str) -> Result<TcpStream, StreamError> {
     let addr = format!("{domain}:443");
-    TcpStream::connect(&addr)
-        .await
-        .map_err(|e| StreamError::WebsocketError(e.to_string()))
+    if std::env::var("HTTPS_PROXY").is_ok() {
+        let http_proxy = std::env::var("HTTPS_PROXY").unwrap_or_default();
+        let (host, port) = http_proxy.split_once(':').unwrap_or_default();
+        let config = ProxyConfig {
+            host: host.to_string(),
+            port: port.parse().unwrap_or_default(),
+            auth: AuthCredential::None,
+            keep_alive: true,
+        };
+        hproxy::async_create_conn(&config, &addr)
+            .await
+            .map_err(|e| StreamError::WebsocketError(e.to_string()))
+    } else {
+        TcpStream::connect(&addr)
+            .await
+            .map_err(|e| StreamError::WebsocketError(e.to_string()))
+    }
 }
 
 async fn setup_tls_connection(

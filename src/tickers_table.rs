@@ -19,6 +19,7 @@ pub enum TickerTab {
     All,
     Bybit,
     Binance,
+    Rithmic,
     Favorites,
 }
 
@@ -215,6 +216,7 @@ impl TickersTable {
         match tab {
             TickerTab::Bybit => matches!(ex, Exchange::BybitLinear | Exchange::BybitSpot),
             TickerTab::Binance => matches!(ex, Exchange::BinanceFutures | Exchange::BinanceSpot),
+            TickerTab::Rithmic => matches!(ex, Exchange::Rithmic),
             _ => false,
         }
     }
@@ -298,6 +300,8 @@ impl TickersTable {
         let bybit_button = create_tab_button(text("Bybit"), &self.selected_tab, TickerTab::Bybit);
         let binance_button =
             create_tab_button(text("Binance"), &self.selected_tab, TickerTab::Binance);
+        let rithmic_button =
+            create_tab_button(text("Rithmic"), &self.selected_tab, TickerTab::Rithmic);
         let favorites_button = create_tab_button(
             text(char::from(Icon::StarFilled).to_string())
                 .font(ICON_FONT)
@@ -428,6 +432,8 @@ impl TickersTable {
                 bybit_button,
                 Space::new(Length::FillPortion(1), Length::Shrink),
                 binance_button,
+                Space::new(Length::FillPortion(1), Length::Shrink),
+                rithmic_button,
             ]
             .padding(padding::bottom(4)),
         ]
@@ -535,6 +541,7 @@ fn create_ticker_card<'a>(
                     match exchange {
                         Exchange::BybitLinear | Exchange::BybitSpot => get_icon_text(Icon::BybitLogo, 12),
                         Exchange::BinanceFutures | Exchange::BinanceSpot => get_icon_text(Icon::BinanceLogo, 12),
+                        Exchange::Rithmic => get_icon_text(Icon::RithmicLogo, 12),
                     },
                     text(&display_data.display_ticker),
                 ]
@@ -586,6 +593,7 @@ fn create_expanded_ticker_card<'a>(
             match exchange {
                 Exchange::BybitLinear | Exchange::BybitSpot => get_icon_text(Icon::BybitLogo, 12),
                 Exchange::BinanceFutures | Exchange::BinanceSpot => get_icon_text(Icon::BinanceLogo, 12),
+                Exchange::Rithmic => get_icon_text(Icon::RithmicLogo, 12),
             },
             text(ticker_str + {
                 match market {

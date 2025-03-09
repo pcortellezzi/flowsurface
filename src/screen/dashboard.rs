@@ -8,7 +8,7 @@ use crate::{
         candlestick::CandlestickChart, footprint::FootprintChart, Message as ChartMessage
     },
     data_providers::{
-        self, binance, bybit, fetcher::FetchRange, Depth, Exchange, Kline, OpenInterest, 
+        self, binance, bybit, rithmic, fetcher::FetchRange, Depth, Exchange, Kline, OpenInterest,
         StreamConfig, TickMultiplier, Ticker, TickerInfo, Timeframe, Trade
     },
     screen::{InfoType, notification_modal},
@@ -574,38 +574,60 @@ impl Dashboard {
                 stream_type,
             ) => {
                 if let StreamType::DepthAndTrades { exchange, ticker } = stream_type {
-                    if exchange == Exchange::BinanceFutures || exchange == Exchange::BinanceSpot {
-                        return Task::perform(
-                            binance::fetch_trades(ticker, from_time),
-                            move |result| match result {
-                                Ok(trades) => Message::DistributeFetchedTrades(
-                                    window_id,
-                                    pane,
-                                    trades,
-                                    stream_type,
-                                    to_time,
-                                ),
-                                Err(err) => Message::ErrorOccurred(
-                                    window_id,
-                                    Some(pane),
-                                    DashboardError::Fetch(err.to_string()),
-                                ),
-                            },
-                        );
-                    } else {
-                        self.notification_manager.remove_info_type(
-                            window_id,
-                            &pane,
-                            &InfoType::FetchingTrades(0),
-                        );
+                    match exchange {
+                        Exchange::BinanceFutures | Exchange::BinanceSpot => {
+                            return Task::perform(
+                                binance::fetch_trades(ticker, from_time),
+                                move |result| match result {
+                                    Ok(trades) => Message::DistributeFetchedTrades(
+                                        window_id,
+                                        pane,
+                                        trades,
+                                        stream_type,
+                                        to_time,
+                                    ),
+                                    Err(err) => Message::ErrorOccurred(
+                                        window_id,
+                                        Some(pane),
+                                        DashboardError::Fetch(err.to_string()),
+                                    ),
+                                },
+                            )
+                        }
+                        Exchange::Rithmic => {
+                            return Task::perform(
+                                rithmic::fetch_trades(ticker, from_time),
+                                move |result| match result {
+                                    Ok(trades) => Message::DistributeFetchedTrades(
+                                        window_id,
+                                        pane,
+                                        trades,
+                                        stream_type,
+                                        to_time,
+                                    ),
+                                    Err(err) => Message::ErrorOccurred(
+                                        window_id,
+                                        Some(pane),
+                                        DashboardError::Fetch(err.to_string()),
+                                    ),
+                                },
+                            )
+                        }
+                        _ => {
+                            self.notification_manager.remove_info_type(
+                                window_id,
+                                &pane,
+                                &InfoType::FetchingTrades(0),
+                            );
 
-                        return Task::done(Message::ErrorOccurred(
-                            window_id,
-                            Some(pane),
-                            DashboardError::Fetch(format!(
-                                "No trade fetch support for {exchange:?}"
-                            )),
-                        ));
+                            return Task::done(Message::ErrorOccurred(
+                                window_id,
+                                Some(pane),
+                                DashboardError::Fetch(format!(
+                                    "No trade fetch support for {exchange:?}"
+                                )),
+                            ))
+                        }
                     }
                 }
             }
@@ -1328,6 +1350,12 @@ impl Dashboard {
                                         move |cfg| bybit::connect_market_stream(cfg.id)
                                     ).map(market_msg.clone())
                                 }
+                                Exchange::Rithmic => {
+                                    Subscription::run_with(
+                                        config,
+                                        move |cfg| rithmic::connect_market_stream(cfg.id)
+                                    ).map(market_msg.clone())
+                                }
                             })
                         },
                         _ => None,
@@ -1359,6 +1387,12 @@ impl Dashboard {
                         Subscription::run_with(
                             config,
                             move |cfg| bybit::connect_kline_stream(cfg.id.clone(), cfg.market_type)
+                        ).map(market_msg.clone())
+                    }
+                    Exchange::Rithmic => {
+                        Subscription::run_with(
+                            config,
+                            move |cfg| rithmic::connect_kline_stream(cfg.id.clone(), cfg.market_type)
                         ).map(market_msg.clone())
                     }
                 });
@@ -1439,6 +1473,11 @@ fn get_oi_fetch_task(
                     .map_err(|err| format!("{err}")),
                 move |oi| Message::OIFetchEvent(req_id, oi, stream, pane, window_id),
             ),
+            Exchange::Rithmic => Task::perform(
+                rithmic::fetch_historical_oi(ticker, from_to_time, timeframe)
+                    .map_err(|err| format!("{err}")),
+                move |oi| Message::OIFetchEvent(req_id, oi, stream, pane, window_id),
+            ),
             _ => {
                 log::error!("No OI fetch support for {exchange:?}");
                 Task::none()
@@ -1468,6 +1507,11 @@ fn get_kline_fetch_task(
             ),
             Exchange::BybitLinear | Exchange::BybitSpot => Task::perform(
                 bybit::fetch_klines(ticker, timeframe, range)
+                    .map_err(|err| format!("{err}")),
+                move |klines| Message::FetchEvent(req_id, klines, stream, pane, window_id),
+            ),
+            Exchange::Rithmic => Task::perform(
+                rithmic::fetch_klines(ticker, timeframe, range)
                     .map_err(|err| format!("{err}")),
                 move |klines| Message::FetchEvent(req_id, klines, stream, pane, window_id),
             ),
@@ -1520,6 +1564,23 @@ fn klines_fetch_all_task(
                 Exchange::BybitLinear | Exchange::BybitSpot => {
                     let fetch_klines = Task::perform(
                         bybit::fetch_klines(ticker, timeframe, None)
+                            .map_err(|err| format!("{err}")),
+                        move |klines| {
+                            Message::DistributeFetchedKlines(
+                                StreamType::Kline {
+                                    exchange,
+                                    ticker,
+                                    timeframe,
+                                },
+                                klines,
+                            )
+                        },
+                    );
+                    tasks.push(fetch_klines);
+                }
+                Exchange::Rithmic => {
+                    let fetch_klines = Task::perform(
+                        rithmic::fetch_klines(ticker, timeframe, None)
                             .map_err(|err| format!("{err}")),
                         move |klines| {
                             Message::DistributeFetchedKlines(

@@ -393,6 +393,7 @@ impl PaneState {
                     match exchange {
                         Exchange::BinanceFutures | Exchange::BinanceSpot => get_icon_text(Icon::BinanceLogo, 14),
                         Exchange::BybitLinear | Exchange::BybitSpot => get_icon_text(Icon::BybitLogo, 14),
+                        Exchange::Rithmic => get_icon_text(Icon::RithmicLogo, 14),
                     },
                     text({
                         if market == MarketType::LinearPerps {
