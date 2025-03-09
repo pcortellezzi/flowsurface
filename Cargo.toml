@@ -23,6 +23,7 @@ http-body-util = "0.1.2"
 hyper = { version = "1", features = ["http1", "server", "client"] }
 hyper-util = { version = "0.1.10" }
 tokio-rustls = "0.24.1"
+webpki-roots = "0.23.1"
 fern = "0.6.2"
 log = "0.4.22"
 thiserror = "1.0.68"
@@ -34,13 +35,7 @@ zip = "2.2.1"
 csv = "1.3.1"
 dirs-next = "2.0.0"
 
-prost = "0.13.5"
-http = "1.2.0"
-hproxy = { version = "0.2.1", features = ["async"] }
-rustls-native-certs = "0.8.1"
-
-[build-dependencies]
-prost-build = "0.13.5"
+rithmic-client = { git = "https://github.com/pcortellezzi/rithmic-rs", rev = "f0d34eb8a4cac557c6b80d683f2835878d8fe7e9" }
 
 [patch.crates-io]
 iced = { git = "https://github.com/iced-rs/iced", rev = "beddf49c76f3b43e7b33452831e1293cad28fd89" }

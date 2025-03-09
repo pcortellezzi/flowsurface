@@ -12,10 +12,9 @@ use rust_decimal::{
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use hproxy::{ProxyConfig, AuthCredential};
-
 pub mod binance;
 pub mod bybit;
+
 pub mod rithmic;
 pub mod fetcher;
 
@@ -122,7 +121,7 @@ impl LocalDepthCache {
     fn fetched(&mut self, new_depth: &VecLocalDepthCache) {
         self.last_update_id = new_depth.last_update_id;
         self.time = new_depth.time;
-    
+
         self.bids = new_depth.bids.iter()
             .map(|order| (OrderedFloat(order.price), order.qty))
             .collect();
@@ -140,7 +139,7 @@ impl LocalDepthCache {
     }
 
     fn update_price_levels(
-        price_map: &mut BTreeMap<OrderedFloat<f32>, f32>, 
+        price_map: &mut BTreeMap<OrderedFloat<f32>, f32>,
         orders: &[Order]
     ) {
         orders.iter().for_each(|order| {
@@ -276,7 +275,7 @@ impl std::fmt::Display for Exchange {
                 Exchange::BinanceSpot => "Binance Spot",
                 Exchange::BybitLinear => "Bybit Linear",
                 Exchange::BybitSpot => "Bybit Spot",
-                Exchange::Rithmic => "Rythmic",
+                Exchange::Rithmic => "Rithmic",
             }
         )
     }
@@ -285,9 +284,9 @@ impl Exchange {
     pub const MARKET_TYPES: [(Exchange, MarketType); 5] = [
         (Exchange::BinanceFutures, MarketType::LinearPerps),
         (Exchange::BybitLinear, MarketType::LinearPerps),
+        (Exchange::Rithmic, MarketType::LinearPerps),
         (Exchange::BinanceSpot, MarketType::Spot),
         (Exchange::BybitSpot, MarketType::Spot),
-        (Exchange::Rithmic, MarketType::LinearPerps),
     ];
 }
 
@@ -308,7 +307,7 @@ impl Ticker {
     pub fn new<S: AsRef<str>>(ticker: S, market_type: MarketType) -> Self {
         let ticker = ticker.as_ref();
         let base_len = ticker.len();
-        
+
         assert!(base_len <= 20, "Ticker too long");
         assert!(
             ticker.chars().all(|c| c.is_ascii_alphanumeric()),
@@ -490,19 +489,19 @@ pub struct OpenInterest {
 // other helpers
 pub fn format_with_commas(num: f32) -> String {
     let s = format!("{num:.0}");
-    
+
     // Handle special case for small numbers
     if s.len() <= 4 && s.starts_with('-') {
         return s;  // Return as-is if it's a small negative number
     }
-    
+
     let mut result = String::with_capacity(s.len() + (s.len() - 1) / 3);
     let (sign, digits) = if s.starts_with('-') {
         ("-", &s[1..])  // Split into sign and digits
     } else {
         ("", &s[..])
     };
-    
+
     let mut i = digits.len();
     while i > 0 {
         if !result.is_empty() {
@@ -512,12 +511,12 @@ pub fn format_with_commas(num: f32) -> String {
         result.insert_str(0, &digits[start..i]);
         i = start;
     }
-    
+
     // Add sign at the start if negative
     if !sign.is_empty() {
         result.insert_str(0, sign);
     }
-    
+
     result
 }
 
@@ -551,10 +550,14 @@ where
 
 pub fn tls_connector() -> Result<TlsConnector, StreamError> {
     let mut root_store = tokio_rustls::rustls::RootCertStore::empty();
-    
-    root_store.add_parsable_certificates(
-        &rustls_native_certs::load_native_certs().expect("could not load platform certs"),
-    );
+
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
 
     let config = ClientConfig::builder()
         .with_safe_defaults()
@@ -566,23 +569,9 @@ pub fn tls_connector() -> Result<TlsConnector, StreamError> {
 
 async fn setup_tcp_connection(domain: &str) -> Result<TcpStream, StreamError> {
     let addr = format!("{domain}:443");
-    if std::env::var("HTTPS_PROXY").is_ok() {
-        let http_proxy = std::env::var("HTTPS_PROXY").unwrap_or_default();
-        let (host, port) = http_proxy.split_once(':').unwrap_or_default();
-        let config = ProxyConfig {
-            host: host.to_string(),
-            port: port.parse().unwrap_or_default(),
-            auth: AuthCredential::None,
-            keep_alive: true,
-        };
-        hproxy::async_create_conn(&config, &addr)
-            .await
-            .map_err(|e| StreamError::WebsocketError(e.to_string()))
-    } else {
-        TcpStream::connect(&addr)
-            .await
-            .map_err(|e| StreamError::WebsocketError(e.to_string()))
-    }
+    TcpStream::connect(&addr)
+        .await
+        .map_err(|e| StreamError::WebsocketError(e.to_string()))
 }
 
 async fn setup_tls_connection(
