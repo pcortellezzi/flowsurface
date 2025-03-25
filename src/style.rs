@@ -3,10 +3,10 @@ use iced::widget::button::Status;
 use iced::widget::container::{self, Style};
 use iced::widget::pane_grid::{Highlight, Line};
 use iced::widget::scrollable::{Rail, Scroller};
-use iced::widget::{text, Text};
-use iced::{widget, Border, Color, Font, Renderer, Shadow, Theme};
+use iced::widget::{Text, text};
+use iced::{Border, Color, Font, Renderer, Shadow, Theme, widget};
 
-pub const ICON_BYTES: &[u8] = include_bytes!("fonts/icons.ttf");
+pub const ICON_BYTES: &[u8] = include_bytes!(".././assets/fonts/icons.ttf");
 pub const ICON_FONT: Font = Font::with_name("icons");
 
 pub enum Icon {
@@ -97,7 +97,7 @@ pub fn branding_text(theme: &Theme) -> iced::widget::text::Style {
                 .secondary
                 .weak
                 .color
-                .scale_alpha(if palette.is_dark { 0.1 } else { 0.6 })
+                .scale_alpha(if palette.is_dark { 0.1 } else { 0.6 }),
         ),
     }
 }
@@ -224,10 +224,7 @@ pub fn button_cancel(
     }
 }
 
-pub fn button_layout_name(
-    theme: &Theme,
-    status: Status,
-) -> iced::widget::button::Style {
+pub fn button_layout_name(theme: &Theme, status: Status) -> iced::widget::button::Style {
     let palette = theme.extended_palette();
 
     match status {
@@ -408,13 +405,7 @@ pub fn pane_background(theme: &Theme, is_focused: bool) -> Style {
 
     Style {
         text_color: Some(palette.background.base.text),
-        background: Some(
-            palette
-                .background
-                .weakest
-                .color
-                .into(),
-        ),
+        background: Some(palette.background.weakest.color.into()),
         border: {
             if is_focused {
                 Border {
@@ -455,13 +446,7 @@ pub fn chart_modal(theme: &Theme) -> Style {
         shadow: Shadow {
             offset: iced::Vector { x: 0.0, y: 0.0 },
             blur_radius: 12.0,
-            color: Color::BLACK.scale_alpha(
-                if palette.is_dark {
-                    0.4
-                } else {
-                    0.2
-                }
-            ),
+            color: Color::BLACK.scale_alpha(if palette.is_dark { 0.4 } else { 0.2 }),
         },
         ..Default::default()
     }
@@ -486,13 +471,7 @@ pub fn dashboard_modal(theme: &Theme) -> Style {
         shadow: Shadow {
             offset: iced::Vector { x: 0.0, y: 0.0 },
             blur_radius: 20.0,
-            color: Color::BLACK.scale_alpha(
-                if palette.is_dark {
-                    0.4
-                } else {
-                    0.2
-                }
-            ),
+            color: Color::BLACK.scale_alpha(if palette.is_dark { 0.4 } else { 0.2 }),
         },
         ..Default::default()
     }
@@ -512,13 +491,7 @@ pub fn modal_container(theme: &Theme) -> Style {
         shadow: Shadow {
             offset: iced::Vector { x: 0.0, y: 0.0 },
             blur_radius: 2.0,
-            color: Color::BLACK.scale_alpha(
-                if palette.is_dark {
-                    0.8
-                } else {
-                    0.2
-                }
-            ),
+            color: Color::BLACK.scale_alpha(if palette.is_dark { 0.8 } else { 0.2 }),
         },
     }
 }
@@ -537,13 +510,7 @@ pub fn layout_row_container(theme: &Theme) -> Style {
         shadow: Shadow {
             offset: iced::Vector { x: 0.0, y: 0.0 },
             blur_radius: 2.0,
-            color: Color::BLACK.scale_alpha(
-                if palette.is_dark {
-                    0.8
-                } else {
-                    0.2
-                }
-            ),
+            color: Color::BLACK.scale_alpha(if palette.is_dark { 0.8 } else { 0.2 }),
         },
     }
 }
@@ -656,13 +623,7 @@ pub fn ticker_card(theme: &Theme) -> Style {
     let palette = theme.extended_palette();
 
     Style {
-        background: Some(
-            palette
-                .background
-                .weakest
-                .color
-                .into(),
-        ),
+        background: Some(palette.background.weakest.color.into()),
         border: Border {
             radius: 4.0.into(),
             width: 1.0,
@@ -710,7 +671,7 @@ pub fn ticker_card_button(theme: &Theme, status: Status) -> iced::widget::button
     }
 }
 
-// the bar that lights up depending on the price change 
+// the bar that lights up depending on the price change
 pub fn ticker_card_bar(theme: &Theme, color_alpha: f32) -> Style {
     let palette = theme.extended_palette();
 
@@ -740,13 +701,12 @@ pub fn scroll_bar(theme: &Theme, status: widget::scrollable::Status) -> widget::
     let palette = theme.extended_palette();
 
     let (rail_bg, scroller_bg) = match status {
-        widget::scrollable::Status::Hovered { .. } 
-        | widget::scrollable::Status::Dragged { .. } => {
+        widget::scrollable::Status::Hovered { .. } | widget::scrollable::Status::Dragged { .. } => {
             (
                 palette.background.weakest.color,
                 palette.background.weak.color,
             )
-        },
+        }
         _ => (
             palette.background.base.color,
             palette.background.weakest.color,
