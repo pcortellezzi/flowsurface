@@ -1,16 +1,14 @@
 pub mod linear;
 pub mod timeseries;
 
+use super::{Basis, Interaction, Message, round_to_tick};
 use chrono::DateTime;
+use data::UserTimezone;
 use iced::{
     Alignment, Color, Event, Point, Rectangle, Renderer, Size, Theme, mouse,
     theme::palette::Extended,
     widget::canvas::{self, Cache, Frame, Geometry},
 };
-
-use crate::screen::UserTimezone;
-
-use super::{ChartBasis, Interaction, Message, round_to_tick};
 
 /// calculates `Rectangle` from given content, clamps it within bounds if needed
 pub fn calc_label_rect(
@@ -94,16 +92,16 @@ impl AxisLabel {
                     content: label.content.clone(),
                     position: rect.center(),
                     color: label.text_color,
-                    vertical_alignment: Alignment::Center.into(),
-                    horizontal_alignment: Alignment::Center.into(),
+                    align_y: Alignment::Center.into(),
+                    align_x: Alignment::Center.into(),
                     size: label.text_size.into(),
                     ..canvas::Text::default()
                 };
 
                 frame.fill_text(label);
             }
-            AxisLabel::Y(rect, price_label, timer_label) => {
-                if let Some(background_color) = price_label.background_color {
+            AxisLabel::Y(rect, value_label, timer_label) => {
+                if let Some(background_color) = value_label.background_color {
                     frame.fill_rectangle(
                         Point::new(rect.x, rect.y),
                         Size::new(rect.width, rect.height),
@@ -112,38 +110,38 @@ impl AxisLabel {
                 }
 
                 if let Some(timer_label) = timer_label {
-                    let price_label = canvas::Text {
-                        content: price_label.content.clone(),
+                    let value_label = canvas::Text {
+                        content: value_label.content.clone(),
                         position: Point::new(rect.x + 4.0, rect.center_y() - 6.0),
-                        color: price_label.text_color,
-                        size: price_label.text_size.into(),
-                        vertical_alignment: Alignment::Center.into(),
+                        color: value_label.text_color,
+                        size: value_label.text_size.into(),
+                        align_y: Alignment::Center.into(),
                         ..canvas::Text::default()
                     };
 
-                    frame.fill_text(price_label);
+                    frame.fill_text(value_label);
 
                     let timer_label = canvas::Text {
                         content: timer_label.content.clone(),
                         position: Point::new(rect.x + 4.0, rect.center_y() + 6.0),
                         color: timer_label.text_color,
                         size: timer_label.text_size.into(),
-                        vertical_alignment: Alignment::Center.into(),
+                        align_y: Alignment::Center.into(),
                         ..canvas::Text::default()
                     };
 
                     frame.fill_text(timer_label);
                 } else {
-                    let price_label = canvas::Text {
-                        content: price_label.content.clone(),
+                    let value_label = canvas::Text {
+                        content: value_label.content.clone(),
                         position: Point::new(rect.x + 4.0, rect.center_y()),
-                        color: price_label.text_color,
-                        size: price_label.text_size.into(),
-                        vertical_alignment: Alignment::Center.into(),
+                        color: value_label.text_color,
+                        size: value_label.text_size.into(),
+                        align_y: Alignment::Center.into(),
                         ..canvas::Text::default()
                     };
 
-                    frame.fill_text(price_label);
+                    frame.fill_text(value_label);
                 }
             }
         }
@@ -159,7 +157,7 @@ pub struct AxisLabelsX<'a> {
     pub max: u64,
     pub scaling: f32,
     pub translation_x: f32,
-    pub basis: ChartBasis,
+    pub basis: Basis,
     pub cell_width: f32,
     pub timezone: &'a UserTimezone,
     pub chart_bounds: Rectangle,
@@ -265,7 +263,7 @@ impl AxisLabelsX<'_> {
         x_labels_can_fit: i32,
     ) -> Vec<AxisLabel> {
         let timeframe = match self.basis {
-            ChartBasis::Time(tf) => tf,
+            Basis::Time(tf) => tf,
             _ => return Vec::new(),
         };
 
@@ -322,7 +320,7 @@ impl AxisLabelsX<'_> {
         }
 
         match self.basis {
-            ChartBasis::Tick(interval) => {
+            Basis::Tick(interval) => {
                 if self.interval_keys.is_empty() {
                     return None;
                 }
@@ -356,7 +354,7 @@ impl AxisLabelsX<'_> {
                     return Some(self.create_label(snap_x, text_content, bounds, true, palette));
                 }
             }
-            ChartBasis::Time(timeframe) => {
+            Basis::Time(timeframe) => {
                 let (_, crosshair_ratio, _) = self.calc_crosshair_pos(cursor_pos, region);
 
                 let x_min = self.x_to_interval(region.x);
@@ -403,7 +401,7 @@ impl AxisLabelsX<'_> {
 
     fn x_to_interval(&self, x: f32) -> u64 {
         match self.basis {
-            ChartBasis::Time(interval) => {
+            Basis::Time(interval) => {
                 if x <= 0.0 {
                     let diff = (-x / self.cell_width * interval as f32) as u64;
                     self.max.saturating_sub(diff)
@@ -412,7 +410,7 @@ impl AxisLabelsX<'_> {
                     self.max.saturating_add(diff)
                 }
             }
-            ChartBasis::Tick(_) => {
+            Basis::Tick(_) => {
                 let tick = -(x / self.cell_width);
                 tick.round() as u64
             }
@@ -504,7 +502,7 @@ impl canvas::Program<Message> for AxisLabelsX<'_> {
             let x_max = self.x_to_interval(region.x + region.width);
 
             match self.basis {
-                ChartBasis::Tick(_) => {
+                Basis::Tick(_) => {
                     all_labels.extend(self.generate_tick_labels(
                         region,
                         bounds,
@@ -512,7 +510,7 @@ impl canvas::Program<Message> for AxisLabelsX<'_> {
                         x_labels_can_fit,
                     ));
                 }
-                ChartBasis::Time(_) => {
+                Basis::Time(_) => {
                     all_labels.extend(self.generate_time_labels(
                         bounds,
                         x_min,
@@ -561,7 +559,7 @@ pub struct AxisLabelsY<'a> {
     pub tick_size: f32,
     pub decimals: usize,
     pub cell_height: f32,
-    pub basis: ChartBasis,
+    pub basis: Basis,
     pub chart_bounds: Rectangle,
 }
 
@@ -686,7 +684,7 @@ impl canvas::Program<Message> for AxisLabelsY<'_> {
             // Last price (priority 2)
             if let Some(label) = self.last_price {
                 let candle_close_label = match self.basis {
-                    ChartBasis::Time(timeframe) => {
+                    Basis::Time(timeframe) => {
                         let current_time = chrono::Utc::now().timestamp_millis() as u64;
                         let next_kline_open = (current_time / timeframe + 1) * timeframe;
 
@@ -717,7 +715,7 @@ impl canvas::Program<Message> for AxisLabelsY<'_> {
                             None
                         }
                     }
-                    ChartBasis::Tick(_) => None,
+                    Basis::Tick(_) => None,
                 };
 
                 let (price, color) = label.get_with_color(palette);
@@ -733,7 +731,7 @@ impl canvas::Program<Message> for AxisLabelsY<'_> {
                                 Color::WHITE
                             }
                         } else {
-                            palette.primary.weak.text
+                            palette.primary.strong.text
                         }
                     },
                     text_size: 12.0,
@@ -816,7 +814,7 @@ impl PriceInfoLabel {
         match self {
             PriceInfoLabel::Up(p) => (*p, palette.success.base.color),
             PriceInfoLabel::Down(p) => (*p, palette.danger.base.color),
-            PriceInfoLabel::Neutral(p) => (*p, palette.primary.weak.color),
+            PriceInfoLabel::Neutral(p) => (*p, palette.secondary.strong.color),
         }
     }
 }

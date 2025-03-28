@@ -1,5 +1,13 @@
+use crate::{Kline, OpenInterest, Trade};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub enum FetchedData {
+    Trades(Vec<Trade>, u64),
+    Klines(Vec<Kline>, Option<uuid::Uuid>),
+    OI(Vec<OpenInterest>, Option<uuid::Uuid>),
+}
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum ReqError {
@@ -74,6 +82,12 @@ impl RequestHandler {
         } else {
             log::warn!("Request not found: {:?}", id);
         }
+    }
+}
+
+impl Default for RequestHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
