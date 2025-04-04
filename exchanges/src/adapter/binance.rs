@@ -182,6 +182,7 @@ fn feed_de(slice: &[u8], market: MarketType) -> Result<StreamData, StreamError> 
 
                         return Ok(StreamData::Depth(SonicDepth::LinearPerp(depth)));
                     }
+                    _ => {}
                 },
                 Some(StreamWrapper::Kline) => {
                     let kline_wrap: SonicKlineWrap = sonic_rs::from_str(&v.as_raw_faststr())
@@ -269,6 +270,7 @@ pub fn connect_market_stream(ticker: Ticker) -> impl Stream<Item = Event> {
         let exchange = match market {
             MarketType::Spot => Exchange::BinanceSpot,
             MarketType::LinearPerps => Exchange::BinanceFutures,
+            _ => panic!()
         };
 
         let stream_1 = format!("{}@aggTrade", symbol_str.to_lowercase());
@@ -284,6 +286,7 @@ pub fn connect_market_stream(ticker: Ticker) -> impl Stream<Item = Event> {
         let domain = match market {
             MarketType::Spot => "stream.binance.com",
             MarketType::LinearPerps => "fstream.binance.com",
+            _ => panic!()
         };
 
         loop {
@@ -515,6 +518,7 @@ pub fn connect_kline_stream(
         let exchange = match market {
             MarketType::Spot => Exchange::BinanceSpot,
             MarketType::LinearPerps => Exchange::BinanceFutures,
+            _ => panic!()
         };
 
         let stream_str = streams
@@ -535,6 +539,7 @@ pub fn connect_kline_stream(
                     let domain = match market {
                         MarketType::Spot => "stream.binance.com",
                         MarketType::LinearPerps => "fstream.binance.com",
+                        _ => panic!()
                     };
 
                     if let Ok(websocket) = connect(domain, stream_str.as_str()).await {
@@ -663,6 +668,7 @@ async fn fetch_depth(ticker: &Ticker) -> Result<TempLocalDepth, StreamError> {
     let base_url = match market_type {
         MarketType::Spot => "https://api.binance.com/api/v3/depth",
         MarketType::LinearPerps => "https://fapi.binance.com/fapi/v1/depth",
+        _ => panic!()
     };
 
     let url = format!(
@@ -701,6 +707,7 @@ async fn fetch_depth(ticker: &Ticker) -> Result<TempLocalDepth, StreamError> {
 
             Ok(depth)
         }
+        _ => panic!()
     }
 }
 
@@ -747,6 +754,7 @@ pub async fn fetch_klines(
     let base_url = match market_type {
         MarketType::Spot => "https://api.binance.com/api/v3/klines",
         MarketType::LinearPerps => "https://fapi.binance.com/fapi/v1/klines",
+        _ => panic!()
     };
 
     let mut url = format!("{base_url}?symbol={symbol_str}&interval={timeframe_str}");
@@ -789,6 +797,7 @@ pub async fn fetch_ticksize(
     let url = match market_type {
         MarketType::Spot => "https://api.binance.com/api/v3/exchangeInfo".to_string(),
         MarketType::LinearPerps => "https://fapi.binance.com/fapi/v1/exchangeInfo".to_string(),
+        _ => panic!()
     };
     let response = reqwest::get(&url).await.map_err(StreamError::FetchError)?;
     let text = response.text().await.map_err(StreamError::FetchError)?;
@@ -811,6 +820,7 @@ pub async fn fetch_ticksize(
         match market_type {
             MarketType::Spot => "Spot",
             MarketType::LinearPerps => "Linear Perps",
+            _ => panic!()
         },
         request_limit
     );
@@ -877,6 +887,7 @@ pub async fn fetch_ticker_prices(
     let url = match market {
         MarketType::Spot => "https://api.binance.com/api/v3/ticker/24hr".to_string(),
         MarketType::LinearPerps => "https://fapi.binance.com/fapi/v1/ticker/24hr".to_string(),
+        _ => panic!()
     };
     let response = reqwest::get(&url).await.map_err(StreamError::FetchError)?;
     let text = response.text().await.map_err(StreamError::FetchError)?;
@@ -891,6 +902,7 @@ pub async fn fetch_ticker_prices(
     let volume_threshold = match market {
         MarketType::Spot => SPOT_FILTER_VOLUME,
         MarketType::LinearPerps => PERP_FILTER_VOLUME,
+        _ => panic!()
     };
 
     for item in value {
@@ -997,6 +1009,7 @@ pub async fn fetch_intraday_trades(ticker: Ticker, from: u64) -> Result<Vec<Trad
     let base_url = match market_type {
         MarketType::Spot => "https://api.binance.com/api/v3/aggTrades",
         MarketType::LinearPerps => "https://fapi.binance.com/fapi/v1/aggTrades",
+        _ => panic!()
     };
 
     let mut url = format!("{base_url}?symbol={symbol_str}&limit=1000",);
@@ -1010,6 +1023,7 @@ pub async fn fetch_intraday_trades(ticker: Ticker, from: u64) -> Result<Vec<Trad
         match market_type {
             MarketType::Spot => 6000.0,
             MarketType::LinearPerps => 2400.0,
+            _ => panic!()
         },
     )
     .await?;
@@ -1044,6 +1058,7 @@ pub async fn get_hist_trades(
     let market_subpath = match market_type {
         MarketType::Spot => format!("data/spot/daily/aggTrades/{symbol}"),
         MarketType::LinearPerps => format!("data/futures/um/daily/aggTrades/{symbol}"),
+        _ => panic!()
     };
 
     let zip_file_name = format!(
@@ -1119,6 +1134,7 @@ pub async fn get_hist_trades(
                                 price,
                                 qty,
                             },
+                            _ => panic!()
                         })
                     })
                 }));

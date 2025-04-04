@@ -213,6 +213,7 @@ async fn connect(
         match market_type {
             MarketType::Spot => "spot",
             MarketType::LinearPerps => "linear",
+            _ => panic!()
         }
     );
     setup_websocket_connection(domain, tls_stream, &url).await
@@ -226,6 +227,7 @@ async fn try_connect(
     let exchange = match market_type {
         MarketType::Spot => Exchange::BybitSpot,
         MarketType::LinearPerps => Exchange::BybitLinear,
+        _ => panic!()
     };
 
     match connect("stream.bybit.com", market_type).await {
@@ -271,6 +273,7 @@ pub fn connect_market_stream(ticker: Ticker) -> impl Stream<Item = Event> {
         let exchange = match market_type {
             MarketType::Spot => Exchange::BybitSpot,
             MarketType::LinearPerps => Exchange::BybitLinear,
+            _ => panic!()
         };
 
         let stream_1 = format!("publicTrade.{symbol_str}");
@@ -279,6 +282,7 @@ pub fn connect_market_stream(ticker: Ticker) -> impl Stream<Item = Event> {
             match market_type {
                 MarketType::Spot => "200",
                 MarketType::LinearPerps => "500",
+                _ => panic!()
             },
             symbol_str,
         );
@@ -395,6 +399,7 @@ pub fn connect_kline_stream(
         let exchange = match market_type {
             MarketType::Spot => Exchange::BybitSpot,
             MarketType::LinearPerps => Exchange::BybitLinear,
+            _ => panic!()
         };
 
         let stream_str = streams
@@ -622,6 +627,7 @@ pub async fn fetch_klines(
     let market = match market_type {
         MarketType::Spot => "spot",
         MarketType::LinearPerps => "linear",
+        _ => panic!()
     };
 
     let mut url = format!(
@@ -678,6 +684,7 @@ pub async fn fetch_ticksize(
     let market = match market_type {
         MarketType::Spot => "spot",
         MarketType::LinearPerps => "linear",
+        _ => panic!()
     };
 
     let url =
@@ -739,6 +746,7 @@ pub async fn fetch_ticker_prices(
     let (market, volume_threshold) = match market_type {
         MarketType::Spot => ("spot", SPOT_FILTER_VOLUME),
         MarketType::LinearPerps => ("linear", PERP_FILTER_VOLUME),
+        _ => panic!()
     };
 
     let url = format!("https://api.bybit.com/v5/market/tickers?category={market}");

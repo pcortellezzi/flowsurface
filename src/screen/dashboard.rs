@@ -12,7 +12,7 @@ use crate::{
 
 use exchanges::{
     Kline, TickMultiplier, Ticker, TickerInfo, Timeframe, Trade,
-    adapter::{self, Event as ExchangeEvent, Exchange, StreamConfig, binance, bybit, rithmic},
+    adapter::{self, Event as ExchangeEvent, Exchange, StreamConfig, binance, bybit, rithmic::RTI_CONNECTOR},
     depth::Depth,
     fetcher::{FetchRange, FetchedData},
 };
@@ -1164,6 +1164,12 @@ impl Dashboard {
                                     })
                                     .map(market_msg.clone())
                                 }
+                                Exchange::Rithmic => {
+                                    Subscription::run_with(config, move |cfg| {
+                                        RTI_CONNECTOR.connect_market_stream(cfg.id)
+                                    })
+                                        .map(market_msg.clone())
+                                }
                             })
                         }
                         _ => None,
@@ -1202,7 +1208,7 @@ impl Dashboard {
                     }
                     Exchange::Rithmic => {
                         Subscription::run_with(config, move |cfg| {
-                            rithmic::connect_kline_stream(cfg.id.clone(), cfg.market_type)
+                            RTI_CONNECTOR.connect_kline_stream(cfg.id.clone(), cfg.market_type)
                         })
                         .map(market_msg.clone())
                     }

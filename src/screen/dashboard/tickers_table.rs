@@ -205,7 +205,7 @@ impl TickersTable {
         } else {
             ticker_str + {
                 match market {
-                    MarketType::Spot => "",
+                    MarketType::Spot | MarketType::Futures => "",
                     MarketType::LinearPerps => "P",
                 }
             }
@@ -429,6 +429,8 @@ impl TickersTable {
                 create_tab_button(text("Bybit"), &self.selected_tab, TickerTab::Bybit);
             let binance_button =
                 create_tab_button(text("Binance"), &self.selected_tab, TickerTab::Binance);
+            let rithmic_button =
+                create_tab_button(text("Rithmic"), &self.selected_tab, TickerTab::Rithmic);
             let favorites_button = create_tab_button(
                 text(char::from(Icon::StarFilled).to_string()).font(ICON_FONT),
                 &self.selected_tab,

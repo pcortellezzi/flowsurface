@@ -5,8 +5,11 @@ use crate::{Kline, OpenInterest, TickerInfo, TickerStats, Trade, depth::Depth};
 use super::{Ticker, Timeframe};
 use serde::{Deserialize, Serialize};
 
+use rithmic::RTI_CONNECTOR;
+
 pub mod binance;
 pub mod bybit;
+pub mod rithmic;
 
 #[derive(thiserror::Error, Debug)]
 pub enum StreamError {
@@ -26,6 +29,7 @@ pub enum StreamError {
 pub enum MarketType {
     Spot,
     LinearPerps,
+    Futures,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -48,6 +52,7 @@ pub enum Exchange {
     BinanceSpot,
     BybitLinear,
     BybitSpot,
+    Rithmic
 }
 
 impl std::fmt::Display for Exchange {
@@ -60,23 +65,26 @@ impl std::fmt::Display for Exchange {
                 Exchange::BinanceSpot => "Binance Spot",
                 Exchange::BybitLinear => "Bybit Linear",
                 Exchange::BybitSpot => "Bybit Spot",
+                Exchange::Rithmic => "Rithmic",
             }
         )
     }
 }
 
 impl Exchange {
-    pub const ALL: [Exchange; 4] = [
+    pub const ALL: [Exchange; 5] = [
         Exchange::BinanceFutures,
         Exchange::BinanceSpot,
         Exchange::BybitLinear,
         Exchange::BybitSpot,
+        Exchange::Rithmic,
     ];
 
     pub fn get_market_type(&self) -> MarketType {
         match self {
             Exchange::BinanceFutures | Exchange::BybitLinear => MarketType::LinearPerps,
             Exchange::BinanceSpot | Exchange::BybitSpot => MarketType::Spot,
+            Exchange::Rithmic => MarketType::Futures,
         }
     }
 }
@@ -103,6 +111,7 @@ impl<I> StreamConfig<I> {
         let market_type = match exchange {
             Exchange::BinanceFutures | Exchange::BybitLinear => MarketType::LinearPerps,
             Exchange::BinanceSpot | Exchange::BybitSpot => MarketType::Spot,
+            Exchange::Rithmic => MarketType::Futures
         };
 
         Self { id, market_type }
@@ -119,6 +128,7 @@ pub async fn fetch_ticker_info(
             binance::fetch_ticksize(market_type).await
         }
         Exchange::BybitLinear | Exchange::BybitSpot => bybit::fetch_ticksize(market_type).await,
+        Exchange::Rithmic => RTI_CONNECTOR.fetch_ticksize(market_type).await,
     }
 }
 
@@ -134,6 +144,7 @@ pub async fn fetch_ticker_prices(
         Exchange::BybitLinear | Exchange::BybitSpot => {
             bybit::fetch_ticker_prices(market_type).await
         }
+        Exchange::Rithmic => RTI_CONNECTOR.fetch_ticker_prices(market_type).await,
     }
 }
 
@@ -150,6 +161,7 @@ pub async fn fetch_klines(
         Exchange::BybitLinear | Exchange::BybitSpot => {
             bybit::fetch_klines(ticker, timeframe, range).await
         }
+        Exchange::Rithmic => RTI_CONNECTOR.fetch_klines(ticker, timeframe, range).await,
     }
 }
 
@@ -162,6 +174,7 @@ pub async fn fetch_open_interest(
     match exchange {
         Exchange::BinanceFutures => binance::fetch_historical_oi(ticker, range, timeframe).await,
         Exchange::BybitLinear => bybit::fetch_historical_oi(ticker, range, timeframe).await,
+        Exchange::Rithmic => RTI_CONNECTOR.fetch_historical_oi(ticker, range, timeframe).await,
         _ => Err(StreamError::InvalidRequest("Invalid exchange".to_string())),
     }
 }

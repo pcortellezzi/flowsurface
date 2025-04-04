@@ -46,8 +46,6 @@ fern = "0.7.1"
 exchanges = { version = "0.1.0", path = "exchanges" }
 data = { version = "0.1.0", path = "data" }
 
-rithmic-client = { git = "https://github.com/pcortellezzi/rithmic-rs", rev = "f0d34eb8a4cac557c6b80d683f2835878d8fe7e9" }
-
 [patch.crates-io]
 iced = { git = "https://github.com/iced-rs/iced", rev = "4b075b9731f4658a885357024cc77dee10e223c3" }
 iced_core = { git = "https://github.com/iced-rs/iced", rev = "4b075b9731f4658a885357024cc77dee10e223c3", package = "iced_core" }

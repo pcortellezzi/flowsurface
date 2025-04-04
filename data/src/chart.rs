@@ -64,6 +64,10 @@ impl std::fmt::Display for Basis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Basis::Time(millis) => match *millis {
+                1_000 => write!(f, "1s"),
+                5_000 => write!(f, "5s"),
+                15_000 => write!(f, "15s"),
+                30_000 => write!(f, "30s"),
                 60_000 => write!(f, "1m"),
                 180_000 => write!(f, "3m"),
                 300_000 => write!(f, "5m"),

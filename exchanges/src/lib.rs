@@ -21,6 +21,10 @@ impl std::fmt::Display for Timeframe {
             f,
             "{}",
             match self {
+                Timeframe::S1 => "1s",
+                Timeframe::S5 => "5s",
+                Timeframe::S15 => "15s",
+                Timeframe::S30 => "30s",
                 Timeframe::M1 => "1m",
                 Timeframe::M3 => "3m",
                 Timeframe::M5 => "5m",
@@ -36,6 +40,10 @@ impl std::fmt::Display for Timeframe {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Timeframe {
+    S1,
+    S5,
+    S15,
+    S30,
     M1,
     M3,
     M5,
@@ -47,7 +55,11 @@ pub enum Timeframe {
 }
 
 impl Timeframe {
-    pub const ALL: [Timeframe; 8] = [
+    pub const ALL: [Timeframe; 12] = [
+        Timeframe::S1,
+        Timeframe::S5,
+        Timeframe::S15,
+        Timeframe::S30,
         Timeframe::M1,
         Timeframe::M3,
         Timeframe::M5,
@@ -58,21 +70,29 @@ impl Timeframe {
         Timeframe::H4,
     ];
 
-    pub fn to_minutes(self) -> u16 {
+    pub fn to_seconds(self) -> u16 {
         match self {
-            Timeframe::M1 => 1,
-            Timeframe::M3 => 3,
-            Timeframe::M5 => 5,
-            Timeframe::M15 => 15,
-            Timeframe::M30 => 30,
-            Timeframe::H1 => 60,
-            Timeframe::H2 => 120,
-            Timeframe::H4 => 240,
+            Timeframe::S1 => 1,
+            Timeframe::S5 => 5,
+            Timeframe::S15 => 15,
+            Timeframe::S30 => 30,
+            Timeframe::M1 => 60,
+            Timeframe::M3 => 180,
+            Timeframe::M5 => 300,
+            Timeframe::M15 => 900,
+            Timeframe::M30 => 1800,
+            Timeframe::H1 => 3600,
+            Timeframe::H2 => 7200,
+            Timeframe::H4 => 28800,
         }
     }
 
+    pub fn to_minutes(self) -> u16 {
+        self.to_seconds()/60
+    }
+
     pub fn to_milliseconds(self) -> u64 {
-        u64::from(self.to_minutes()) * 60_000
+        u64::from(self.to_seconds()) * 1000
     }
 }
 
@@ -91,6 +111,10 @@ impl From<Timeframe> for u64 {
 impl From<u64> for Timeframe {
     fn from(milliseconds: u64) -> Timeframe {
         match milliseconds {
+            1_000 => Timeframe::S1,
+            5_000 => Timeframe::S5,
+            15_000 => Timeframe::S15,
+            30_000 => Timeframe::S30,
             60_000 => Timeframe::M1,
             180_000 => Timeframe::M3,
             300_000 => Timeframe::M5,
@@ -118,7 +142,7 @@ impl Ticker {
 
         assert!(base_len <= 20, "Ticker too long");
         assert!(
-            ticker.chars().all(|c| c.is_ascii_alphanumeric()),
+            ticker.chars().all(|c| c.is_ascii()),
             "Invalid character in ticker: {ticker:?}"
         );
 
@@ -129,6 +153,7 @@ impl Ticker {
             let value = match c {
                 b'0'..=b'9' => c - b'0',
                 b'A'..=b'Z' => c - b'A' + 10,
+                b':' => c - b':' + 36,
                 _ => unreachable!(),
             };
             let shift = (i % 10) * 6;
@@ -150,6 +175,7 @@ impl Ticker {
             let c = match value {
                 0..=9 => (b'0' + value as u8) as char,
                 10..=35 => (b'A' + (value as u8 - 10)) as char,
+                36 => b':' as char,
                 _ => unreachable!(),
             };
             result.push(c);
