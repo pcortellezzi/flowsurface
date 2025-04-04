@@ -11,7 +11,7 @@ use data::{
     chart::Basis,
     layout::{WindowSpec, pane::Axis},
 };
-use exchanges::{TickMultiplier, Ticker, Timeframe, adapter::Exchange};
+use exchange::{TickMultiplier, Ticker, Timeframe, adapter::Exchange};
 
 use iced::widget::{
     Space, button, center, column, container,
@@ -54,7 +54,6 @@ pub struct LayoutManager {
     pub active_layout: Layout,
     pub layout_order: Vec<Uuid>,
     edit_mode: Editing,
-    is_locked: bool,
 }
 
 impl LayoutManager {
@@ -73,16 +72,7 @@ impl LayoutManager {
             active_layout: layout1.clone(),
             layout_order: vec![layout1.id],
             edit_mode: Editing::None,
-            is_locked: false,
         }
-    }
-
-    pub fn toggle_layout_lock(&mut self) {
-        self.is_locked = !self.is_locked;
-    }
-
-    pub fn is_layout_locked(&self) -> bool {
-        self.is_locked
     }
 
     fn generate_unique_layout_name(&self) -> String {
@@ -100,9 +90,9 @@ impl LayoutManager {
         }
     }
 
-    fn ensure_unique_name(&self, proposed_name: String, current_id: Uuid) -> String {
+    fn ensure_unique_name(&self, proposed_name: &str, current_id: Uuid) -> String {
         let mut counter = 2;
-        let mut final_name = proposed_name.clone();
+        let mut final_name = proposed_name.to_string();
 
         while self
             .layouts
@@ -178,7 +168,7 @@ impl LayoutManager {
                 self.edit_mode = Editing::Preview;
             }
             Message::SetLayoutName(id, new_name) => {
-                let unique_name = self.ensure_unique_name(new_name, id);
+                let unique_name = self.ensure_unique_name(&new_name, id);
                 let updated_layout = Layout {
                     id,
                     name: unique_name,
@@ -209,7 +199,7 @@ impl LayoutManager {
                     let new_id = Uuid::new_v4();
                     let new_layout = Layout {
                         id: new_id,
-                        name: self.ensure_unique_name(layout.name.clone(), new_id),
+                        name: self.ensure_unique_name(&layout.name, new_id),
                     };
 
                     let ser_dashboard = data::Dashboard::from(dashboard);
@@ -612,7 +602,7 @@ fn configuration(pane: data::Pane) -> Configuration<PaneState> {
                         CandlestickChart::new(
                             layout,
                             basis,
-                            vec![],
+                            &[],
                             vec![],
                             ticker_info.min_ticksize,
                             &indicators,
@@ -649,7 +639,7 @@ fn configuration(pane: data::Pane) -> Configuration<PaneState> {
                             layout,
                             basis,
                             tick_size,
-                            vec![],
+                            &[],
                             vec![],
                             &indicators,
                             settings.ticker_info,
@@ -702,10 +692,15 @@ fn configuration(pane: data::Pane) -> Configuration<PaneState> {
             stream_type,
             settings,
         } => {
+            if settings.ticker_info.is_none() {
+                log::info!("Skipping a TimeAndSales initialization due to missing ticker info");
+                return Configuration::Pane(PaneState::new());
+            }
+
             let config = settings.visual_config.and_then(|cfg| cfg.time_and_sales());
 
             Configuration::Pane(PaneState::from_config(
-                PaneContent::TimeAndSales(TimeAndSales::new(config)),
+                PaneContent::TimeAndSales(TimeAndSales::new(config, settings.ticker_info)),
                 stream_type,
                 settings,
             ))
@@ -766,7 +761,6 @@ pub fn load_saved_state() -> SavedState {
                     active_layout,
                     layout_order,
                     edit_mode: Editing::None,
-                    is_locked: false,
                 }
             };
 

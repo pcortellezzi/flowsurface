@@ -136,8 +136,8 @@ impl RithmicConnector {
         stream::channel(100, async move |mut output| {
             let mut state = State::Disconnected;
 
-            let (ticker_str, _) = ticker.get_string();
-            let Some((symbol_str, exchange_str)) = ticker_str.split_once(":") else { todo!() };
+            let (ticker_str, _) = ticker.to_full_symbol_and_type();
+            let Some((symbol_str, exchange_str)) = ticker_str.split_once("_") else { todo!() };
 
             let exchange = Exchange::Rithmic;
 
@@ -242,7 +242,7 @@ impl RithmicConnector {
                     State::Disconnected => {
                         let history_plant_handle = self.get_history_handle();
                         for (ticker, time_frame) in streams.clone() {
-                            let (ticker_str, _) = ticker.get_string();
+                            let (ticker_str, _) = ticker.to_full_symbol_and_type();
                             let (bar_type, period) = match time_frame.to_string().chars().nth_back(0).unwrap() {
                                 's' => (request_time_bar_update::BarType::SecondBar, time_frame.to_seconds()),
                                 'm' => (request_time_bar_update::BarType::MinuteBar, time_frame.to_minutes()),
@@ -250,7 +250,7 @@ impl RithmicConnector {
                                 _ => (request_time_bar_update::BarType::WeeklyBar, time_frame.to_minutes()),
                             };
                             log::warn!("{:?}:{:?}", bar_type, period);
-                            let Some((symbol_str, exchange_str)) = ticker_str.split_once(":") else { todo!() };
+                            let Some((symbol_str, exchange_str)) = ticker_str.split_once("_") else { todo!() };
                             let rep = history_plant_handle.subscribe_time_bar(
                                 symbol_str, exchange_str,
                                 bar_type, period as i32,
@@ -326,8 +326,8 @@ impl RithmicConnector {
     ) -> Result<Vec<Kline>, StreamError> {
         let history_plant_handle = self.get_history_handle();
 
-        let (ticker_str, _) = ticker.get_string();
-        let Some((symbol_str, exchange_str)) = ticker_str.split_once(":") else { todo!() };
+        let (ticker_str, _) = ticker.to_full_symbol_and_type();
+        let Some((symbol_str, exchange_str)) = ticker_str.split_once("_") else { todo!() };
 
         let (bar_type, period) = match timeframe.to_string().chars().nth_back(0).unwrap() {
             's' => (request_time_bar_replay::BarType::SecondBar, timeframe.to_seconds()),
@@ -340,7 +340,7 @@ impl RithmicConnector {
             (start, end)
         } else {
             let now = chrono::Utc::now().timestamp() as u64;
-            (now - 1000, now)
+            (now - 2000 * timeframe.to_seconds() as u64, now)
         };
 
         let time_bars = history_plant_handle.get_historical_time_bar(
@@ -376,14 +376,14 @@ impl RithmicConnector {
         market_type: MarketType
     ) -> Result<HashMap<Ticker, Option<TickerInfo>>, StreamError> {
         Ok(HashMap::from([
-            (Ticker::new("NQM5:CME", MarketType::Futures),
+            (Ticker::new("NQM5_CME", MarketType::Future),
              Some(TickerInfo {
-                 ticker: Ticker::new("NQM5:CME", MarketType::Futures),
+                 ticker: Ticker::new("NQM5_CME", MarketType::Future),
                  min_ticksize: 0.25
              })),
-            (Ticker::new("ESM5:CME", MarketType::Futures),
+            (Ticker::new("ESM5_CME", MarketType::Future),
              Some(TickerInfo {
-                 ticker: Ticker::new("ESM5:CME", MarketType::Futures),
+                 ticker: Ticker::new("ESM5_CME", MarketType::Future),
                  min_ticksize: 0.25
              })),
         ]))
@@ -402,19 +402,22 @@ impl RithmicConnector {
         let mut hash_map: HashMap<Ticker, TickerStats> = HashMap::new();
         for symbol in symbols {
             if let RithmicMessage::ResponseSearchSymbols(response_search_symbol) = symbol.message {
-                hash_map.insert(
-                    Ticker::new(
-                        format!("{}:{}",
-                                response_search_symbol.symbol(),
-                                response_search_symbol.exchange()),
-                        MarketType::Futures
-                    ),
-                    TickerStats {
-                        mark_price: 0.0,
-                        daily_price_chg: 0.0,
-                        daily_volume: 0.0
-                    }
-                );
+                if response_search_symbol.symbol().chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    hash_map.insert(
+                        Ticker::new(
+                            format!("{}_{}",
+                                    response_search_symbol.symbol(),
+                                    response_search_symbol.exchange()),
+                            MarketType::Future
+                        ),
+                        TickerStats {
+                            mark_price: 0.0,
+                            daily_price_chg: 0.0,
+                            daily_volume: 0.0
+                        }
+                    );
+                }
             }
         }
         Ok(hash_map)

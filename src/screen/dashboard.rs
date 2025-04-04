@@ -10,7 +10,7 @@ use crate::{
     window::{self, Window},
 };
 
-use exchanges::{
+use exchange::{
     Kline, TickMultiplier, Ticker, TickerInfo, Timeframe, Trade,
     adapter::{self, Event as ExchangeEvent, Exchange, StreamConfig, binance, bybit, rithmic::RTI_CONNECTOR},
     depth::Depth,
@@ -37,7 +37,7 @@ pub enum Message {
     Pane(window::Id, pane::Message),
     SavePopoutSpecs(HashMap<window::Id, WindowSpec>),
     ErrorOccurred(Option<uuid::Uuid>, DashboardError),
-    GlobalNotification(Toast),
+    Notification(Toast),
 
     LayoutFetchAll,
     RefreshStreams,
@@ -175,7 +175,7 @@ impl Dashboard {
                     }
                 }
                 _ => {
-                    return Task::done(Message::GlobalNotification(Toast::error(err.to_string())));
+                    return Task::done(Message::Notification(Toast::error(err.to_string())));
                 }
             },
             Message::Pane(window, message) => {
@@ -282,7 +282,7 @@ impl Dashboard {
                                         .or_default()
                                         .insert(*stream);
                                 }
-                                _ => {}
+                                StreamType::None => {}
                             }
                         }
 
@@ -403,7 +403,7 @@ impl Dashboard {
                     pane::Message::Merge => return self.merge_pane(main_window),
                     pane::Message::ToggleIndicator(pane, indicator_str) => {
                         if let Some(pane_state) = self.get_mut_pane(main_window.id, window, pane) {
-                            pane_state.content.toggle_indicator(indicator_str);
+                            pane_state.content.toggle_indicator(&indicator_str);
                         }
                     }
                     pane::Message::DeleteNotification(pane, idx) => {
@@ -438,7 +438,10 @@ impl Dashboard {
             }
             Message::FetchTrades(pane_id, from_time, to_time, stream_type) => {
                 if let StreamType::DepthAndTrades { exchange, ticker } = stream_type {
-                    if exchange == Exchange::BinanceFutures || exchange == Exchange::BinanceSpot {
+                    if exchange == Exchange::BinanceSpot
+                        || exchange == Exchange::BinanceLinear
+                        || exchange == Exchange::BinanceInverse
+                    {
                         let data_path = get_data_path("market_data/binance/");
 
                         let dashboard_id = *layout_id;
@@ -447,7 +450,7 @@ impl Dashboard {
                             binance::fetch_trades(ticker, from_time, data_path),
                             move |result| match result {
                                 Ok(trades) => {
-                                    let data = FetchedData::Trades(trades.to_vec(), to_time);
+                                    let data = FetchedData::Trades(trades.clone(), to_time);
                                     Message::DistributeFetchedData(
                                         dashboard_id,
                                         pane_id,
@@ -555,7 +558,12 @@ impl Dashboard {
                     pane_state.status = status;
                 }
             }
-            _ => {}
+            Message::DistributeFetchedData(_, _, _, _) => {
+                // this is handled by the parent `State`
+            }
+            Message::Notification(_) => {
+                // this is handled by the parent `State`
+            }
         }
 
         Task::none()
@@ -728,13 +736,12 @@ impl Dashboard {
     pub fn view<'a>(
         &'a self,
         main_window: &'a Window,
-        layout_locked: bool,
-        timezone: &'a UserTimezone,
+        timezone: UserTimezone,
     ) -> Element<'a, Message> {
         let focus = self.focus;
 
-        let mut pane_grid = PaneGrid::new(&self.panes, |id, pane, maximized| {
-            let is_focused = !layout_locked && focus == Some((main_window.id, id));
+        let pane_grid: Element<_> = PaneGrid::new(&self.panes, |id, pane, maximized| {
+            let is_focused = focus == Some((main_window.id, id));
             pane.view(
                 id,
                 self.panes.len(),
@@ -745,17 +752,12 @@ impl Dashboard {
                 timezone,
             )
         })
+        .on_click(pane::Message::PaneClicked)
+        .on_resize(8, pane::Message::PaneResized)
+        .on_drag(pane::Message::PaneDragged)
         .spacing(6)
-        .style(style::pane_grid);
-
-        if !layout_locked {
-            pane_grid = pane_grid
-                .on_click(pane::Message::PaneClicked)
-                .on_resize(8, pane::Message::PaneResized)
-                .on_drag(pane::Message::PaneDragged);
-        }
-
-        let pane_grid: Element<_> = pane_grid.into();
+        .style(style::pane_grid)
+        .into();
 
         container(pane_grid.map(move |message| Message::Pane(main_window.id, message))).into()
     }
@@ -764,12 +766,11 @@ impl Dashboard {
         &'a self,
         window: window::Id,
         main_window: &'a Window,
-        layout_locked: bool,
-        timezone: &'a UserTimezone,
+        timezone: UserTimezone,
     ) -> Element<'a, Message> {
         if let Some((state, _)) = self.popout.get(&window) {
-            let content = container({
-                let mut pane_grid = PaneGrid::new(state, |id, pane, _maximized| {
+            let content = container(
+                PaneGrid::new(state, |id, pane, _maximized| {
                     let is_focused = self.focus == Some((window, id));
                     pane.view(
                         id,
@@ -780,13 +781,9 @@ impl Dashboard {
                         main_window,
                         timezone,
                     )
-                });
-
-                if !layout_locked {
-                    pane_grid = pane_grid.on_click(pane::Message::PaneClicked);
-                }
-                pane_grid
-            })
+                })
+                .on_click(pane::Message::PaneClicked),
+            )
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(8);
@@ -867,10 +864,7 @@ impl Dashboard {
                 }
 
                 match &pane_state.content {
-                    PaneContent::Candlestick(_, _) => {
-                        return Ok((stream_type, pane_state.id));
-                    }
-                    PaneContent::Footprint(_, _) => {
+                    PaneContent::Candlestick(_, _) | PaneContent::Footprint(_, _) => {
                         return Ok((stream_type, pane_state.id));
                     }
                     _ => {}
@@ -885,18 +879,18 @@ impl Dashboard {
     pub fn init_pane_task(
         &mut self,
         main_window: window::Id,
-        ticker: (Ticker, TickerInfo),
+        ticker_info: TickerInfo,
         exchange: Exchange,
         content: &str,
     ) -> Task<Message> {
         if let Some((window, selected_pane)) = self.focus {
             if let Some(pane_state) = self.get_mut_pane(main_window, window, selected_pane) {
                 return pane_state
-                    .init_content_task(content, exchange, ticker, selected_pane)
+                    .init_content_task(content, exchange, ticker_info, selected_pane)
                     .map(move |msg| Message::Pane(window, msg));
             }
         } else {
-            return Task::done(Message::GlobalNotification(Toast::warn(
+            return Task::done(Message::Notification(Toast::warn(
                 "Select a pane first".to_string(),
             )));
         }
@@ -928,7 +922,7 @@ impl Dashboard {
 
                 if last_trade_time < to_time {
                     match self.insert_fetched_trades(main_window, pane_uid, &trades, false) {
-                        Ok(_) => {
+                        Ok(()) => {
                             return Task::done(Message::FetchTrades(
                                 pane_uid,
                                 last_trade_time,
@@ -960,7 +954,7 @@ impl Dashboard {
                     pane_state.status = pane::Status::Ready;
 
                     if let StreamType::Kline { .. } = stream_type {
-                        pane_state.insert_oi_vec(req_id, oi);
+                        pane_state.insert_oi_vec(req_id, &oi);
                     }
                 }
             }
@@ -1052,8 +1046,8 @@ impl Dashboard {
         &mut self,
         stream: &StreamType,
         depth_update_t: u64,
-        depth: Depth,
-        trades_buffer: Box<[Trade]>,
+        depth: &Depth,
+        trades_buffer: &[Trade],
         main_window: window::Id,
     ) -> Task<Message> {
         let mut found_match = false;
@@ -1063,16 +1057,16 @@ impl Dashboard {
                 if pane_state.matches_stream(stream) {
                     match &mut pane_state.content {
                         PaneContent::Heatmap(chart, _) => {
-                            chart.insert_datapoint(&trades_buffer, depth_update_t, &depth);
+                            chart.insert_datapoint(trades_buffer, depth_update_t, depth);
                         }
                         PaneContent::Footprint(chart, _) => {
-                            chart.insert_trades_buffer(&trades_buffer, depth_update_t);
+                            chart.insert_trades_buffer(trades_buffer, depth_update_t);
                         }
                         PaneContent::TimeAndSales(chart) => {
-                            chart.update(&trades_buffer);
+                            chart.update(trades_buffer);
                         }
                         PaneContent::Candlestick(chart, _) => {
-                            chart.insert_trades_buffer(&trades_buffer);
+                            chart.insert_trades_buffer(trades_buffer);
                         }
                         _ => {
                             log::error!("No chart found for the stream: {stream:?}");
@@ -1152,13 +1146,17 @@ impl Dashboard {
                         StreamType::DepthAndTrades { ticker, .. } => {
                             let config = StreamConfig::new(*ticker, *exchange);
                             Some(match exchange {
-                                Exchange::BinanceSpot | Exchange::BinanceFutures => {
+                                Exchange::BinanceSpot
+                                | Exchange::BinanceInverse
+                                | Exchange::BinanceLinear => {
                                     Subscription::run_with(config, move |cfg| {
                                         binance::connect_market_stream(cfg.id)
                                     })
                                     .map(market_msg.clone())
                                 }
-                                Exchange::BybitSpot | Exchange::BybitLinear => {
+                                Exchange::BybitSpot
+                                | Exchange::BybitLinear
+                                | Exchange::BybitInverse => {
                                     Subscription::run_with(config, move |cfg| {
                                         bybit::connect_market_stream(cfg.id)
                                     })
@@ -1194,13 +1192,13 @@ impl Dashboard {
                 let config = StreamConfig::new(kline_streams, *exchange);
 
                 market_subscriptions.push(match exchange {
-                    Exchange::BinanceSpot | Exchange::BinanceFutures => {
+                    Exchange::BinanceSpot | Exchange::BinanceInverse | Exchange::BinanceLinear => {
                         Subscription::run_with(config, move |cfg| {
                             binance::connect_kline_stream(cfg.id.clone(), cfg.market_type)
                         })
                         .map(market_msg.clone())
                     }
-                    Exchange::BybitSpot | Exchange::BybitLinear => {
+                    Exchange::BybitSpot | Exchange::BybitInverse | Exchange::BybitLinear => {
                         Subscription::run_with(config, move |cfg| {
                             bybit::connect_kline_stream(cfg.id.clone(), cfg.market_type)
                         })
@@ -1256,7 +1254,7 @@ impl Dashboard {
                             let ticker_map = exchange_map.entry(ticker).or_insert(HashSet::new());
                             ticker_map.insert(StreamType::DepthAndTrades { exchange, ticker });
                         }
-                        _ => {}
+                        StreamType::None => {}
                     }
                 }
             });
@@ -1301,13 +1299,13 @@ impl Dashboard {
                         adapter::fetch_klines(exchange, ticker, timeframe, None)
                             .map_err(|err| format!("{err}")),
                         move |result| match result {
-                            Ok(_) => Message::GlobalNotification(Toast::warn(format!(
+                            Ok(_) => Message::Notification(Toast::warn(format!(
                                 "Fetched klines for stream with no matching panes: {exchange:?} {:?} {timeframe:?}",
-                                ticker.get_string(),
+                                ticker.to_full_symbol_and_type(),
                             ))),
-                            Err(err) => Message::GlobalNotification(Toast::error(format!(
+                            Err(err) => Message::Notification(Toast::error(format!(
                                 "Failed to fetch klines for stream: {exchange:?} {:?} {timeframe:?} {err}",
-                                ticker.get_string(),
+                                ticker.to_full_symbol_and_type(),
                             ))),
                         },
                     );
@@ -1345,8 +1343,8 @@ fn get_oi_fetch_task(
     let fetch_task = match stream {
         StreamType::Kline {
             exchange,
-            ticker,
             timeframe,
+            ticker,
         } => Task::perform(
             adapter::fetch_open_interest(exchange, ticker, timeframe, range)
                 .map_err(|err| format!("{err}")),
